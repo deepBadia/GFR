@@ -41,6 +41,8 @@ Le fichier `history.csv` produit (colonnes `n_labeled_geoms`, `weighted_mse`, ..
 
 ## Lancer les choses en pratique
 
+### Un dataset à la fois
+
 ```bash
 cd IA_mesure/experiments/secteur1
 python 01_train_gfr.py                       # baseline complet (config.yaml)
@@ -50,6 +52,41 @@ python 04_compare_models.py                  # tableau + graphes de comparaison
 ```
 
 Chaque script accepte des options en ligne de commande pour des tests rapides sans toucher `config.yaml` (`--epochs`, `--n-rounds`, `--n-trials`, ...) -- voir `--help` ou l'en-tête de chaque fichier.
+
+### Tous les datasets d'un coup : `run_all.py`
+
+`run_all.py` (à la racine de `experiments/`) lance la pipeline pour les 6 dossiers automatiquement -- plus besoin de `cd` dans chacun à la main.
+
+```bash
+cd IA_mesure/experiments
+
+# Baseline + active learning + comparaison, sur les 6 datasets (defaut ; le
+# tuning Optuna n'est PAS inclus par defaut car c'est l'etape la plus lente)
+python run_all.py
+
+# Sanity check rapide avant un vrai run (epochs/rounds/trials reduits)
+python run_all.py --quick
+
+# Seulement certains datasets
+python run_all.py --datasets secteur1 mesure_couplage
+
+# Inclure aussi le tuning Optuna
+python run_all.py --only train active tune compare
+
+# Ne relancer que la comparaison (apres des trainings deja faits separement)
+python run_all.py --only compare
+
+# Paralleliser (attention a la charge CPU/RAM : N datasets entraines en meme temps)
+python run_all.py --jobs 3
+
+# S'arreter des la premiere erreur au lieu de continuer sur les autres datasets
+python run_all.py --stop-on-error
+```
+
+Chaque étape de chaque dataset tourne dans son propre sous-processus : une erreur sur un dataset n'empêche pas les autres de continuer (sauf avec `--stop-on-error`). Avec `--jobs > 1`, le nombre de threads PyTorch par processus est automatiquement plafonné (`OMP_NUM_THREADS`/`MKL_NUM_THREADS`) pour éviter que N jobs ne se marchent dessus sur les mêmes cœurs CPU -- sans ça, `--jobs 3` sur une machine à 4 cœurs peut être **plus lent** que du séquentiel (observé : 8 min contre 22 s sur le même run une fois le plafonnement en place). Tout est journalisé dans `run_all_logs/<timestamp>/` :
+- un fichier `<dataset>__<step>.log` par (dataset, étape) -- la sortie complète du script ;
+- `all_datasets_comparison.csv` -- toutes les lignes de tous les `comparison_summary.csv` empilées (colonne `dataset` ajoutée), pour comparer les 6 jeux de données d'un coup d'œil ;
+- un résumé (OK/FAIL + durée par étape) imprimé à la fin, avec un code de sortie non-nul si au moins une étape a échoué.
 
 Sorties (non versionnées, voir `.gitignore`) :
 ```
