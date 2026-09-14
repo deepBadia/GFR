@@ -46,6 +46,8 @@ def train_model(
     save_path: Optional[str | Path] = None,
     tuner: bool = False,
     time_hours: float = 24.0,
+    new_points: Optional[Any] = None,
+    timestamp: Optional[str] = None,
     **config_overrides: Any,
 ) -> Any:
     """Run standard training or hyperparameter tuning for a given experiment.
@@ -66,6 +68,16 @@ def train_model(
         If True, run Optuna hyperparameter tuning instead of a single training run.
     time_hours : float, default 24.0
         Maximum wall-clock time for tuning (only used when `tuner=True`).
+    new_points : array-like, optional
+        Geometry indices (1D) or (geometry, axis) pairs (2D) that have been
+        "labeled" so far. Forwarded to the DataLoader/trainer so training only
+        uses this labeled subset instead of the whole pool -- this is what an
+        active-learning loop uses at each round. Ignored when `tuner=True`.
+    timestamp : str, optional
+        Explicit run identifier used to name the results/ subfolder. If None,
+        the current date/time is used. Pass a distinct value per call (e.g.
+        per active-learning round) to avoid different runs overwriting the
+        same folder.
     **config_overrides
         Optional keyword arguments to override config values at runtime
         (advanced use, applied after loading).
@@ -120,6 +132,8 @@ def train_model(
         config=config,
         process_batch=process_batch,
         save_path=save_path,
+        new_points=new_points,
+        timestamp=timestamp,
     )
 
 

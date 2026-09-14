@@ -1,0 +1,92 @@
+# mesure_couplage.h5 -- antenna-to-antenna coupling measurements.
+#
+# Confirmed column meaning (from the data owner, since the raw h5 attribute
+# names are misleading):
+#   ant_nb -> the real frequency sweep (2..11 GHz, 37 points, 0.25 GHz step)
+#   freq   -> the coupling-pair identifier ("numero du couplage", 1..8)
+#   pol    -> polarization (0/1)
+#   value  -> coupling in dB (the target)
+#
+# So: axis_column is "ant_nb" (it really is frequency), and "freq" is used
+# as one of the two X_columns (geometry-like) alongside "pol". Only 16
+# distinct (coupling_id, pol) combinations exist in this file -- by far the
+# smallest of the 6 datasets, so treat the active-learning results here as
+# illustrative rather than a strong efficiency claim (see README.md).
+
+templates:
+
+  base:
+    common:
+      data_file: "mesure_couplage.h5"
+      n_out: 1
+      complex: false
+      complex_format: null
+      seed: 42
+      verbose: true
+      cuda_nb: 0
+    dataset:
+      X_columns: ["freq", "pol"]     # "freq" = coupling-pair id, NOT frequency (see note above)
+      Y_columns: ["value"]
+      axis_column: "ant_nb"          # "ant_nb" = the real frequency axis (see note above)
+      index_column: "index"
+      weights_type: "equal"
+      val_split: 0.20
+      size: 13                       # ~80% of the 16 (coupling_id, pol) combos -> pool; 3 held out as test
+
+  model_gfr:
+    common:
+      model_name: "GFR_Net"
+    model:
+      hidden_dim: 128
+      n_fourier: 32
+      n_layers: 4
+      n_out_layers: 2
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+
+  model_active_gfr:
+    common:
+      model_name: "active_gfr_net"
+    model:
+      hidden_dim: 128
+      n_fourier: 32
+      n_layers: 4
+      n_out_layers: 2
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+      mc_dropout: 0.20
+
+  train_standard:
+    training:
+      epochs: 1500
+      patience: 1500
+      patience_start: 300
+      batch_size: 16
+      lr: 0.0005
+      w_decay: 0.00006
+      cosine_T0: 150
+      metric: "weighted_mse"
+
+  tuning_search:
+    tuning:
+      hidden_dim: [32, 64, 128, 192]
+      n_fourier: [8, 16, 32, 48]
+      n_layers: [2, 6]
+      dropout: [0.0, 0.4]
+      lr: [1.0e-5, 1.0e-2]
+      w_decay: [1.0e-7, 1.0e-2]
+      batch_size: [8, 16, 32]
+
+experiments:
+
+  mesure_couplage_gfr:
+    inherit: [base, model_gfr, train_standard, tuning_search]
+    common:
+      save_name: "baseline"
+
+  mesure_couplage_active_gfr:
+    inherit: [base, model_active_gfr, train_standard]
+    common:
+      save_name: "active"

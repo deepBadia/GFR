@@ -3,6 +3,7 @@
 import os
 import time
 import pandas as pd
+import optuna
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
@@ -21,12 +22,29 @@ def train_model(
     trial=None,
     report_interval=None,
     fold=None,
-    timestamp=datetime.now().strftime("%Y%m%d_%H%M")
+    timestamp=None,
+    new_points=None,
 ):
     """
     Train a model. Accepts a DataLoader object.
     Supports optional axis masks if present in the data.
+
+    Parameters
+    ----------
+    new_points : np.ndarray | list | None, default None
+        Forwarded to ``dataloader.get_data(new_points=...)``. Passing the
+        geometry indices (or (geometry, axis) pairs) that have been queried
+        so far restricts training to that labeled subset, which is what
+        makes active-learning loops actually work end-to-end. Leave as
+        ``None`` for standard (fully supervised) training on the whole pool.
     """
+    if timestamp is None:
+        # Evaluated lazily (per call) rather than as a mutable default
+        # argument, otherwise every call in a process would silently reuse
+        # the timestamp captured when this module was first imported and
+        # overwrite each other's results/ folder.
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+
     verbose = config["common"].get("verbose", True)
     cuda_nb = config["common"].get("cuda_nb", 0)
     max_time = config["common"].get("max_time", float("inf"))
@@ -48,8 +66,10 @@ def train_model(
 
     model = model.to(device)
 
-    # Get current split from dataloader
-    data = dataloader.get_data()
+    # Get current split from dataloader. When `new_points` is provided,
+    # training/validation are restricted to the geometries labeled so far
+    # (active-learning mode); otherwise the full pool is used (standard mode).
+    data = dataloader.get_data(new_points=new_points, verbose=verbose)
 
     x_train = data["X_train"].to(device)
     y_train = data["Y_train"].to(device)
@@ -118,7 +138,11 @@ def train_model(
         f"{prefix}_{model_name}_{timestamp}",
     )
 
-    if model_name in ["active_gfr_net", "active_gfr"] or fold_id is not None:
+    # Only nest under a `_tuning/trials/trial_X` subfolder when this call is
+    # actually part of an Optuna trial or an explicit CV fold. Previously the
+    # `model_name in [...]` clause forced *every* active_gfr_net run into a
+    # "trial_None" folder even for a plain (non-tuning) training call.
+    if fold_id is not None:
         base = os.path.join(base + '_tuning', f"trials/trial_{fold_id}")
         config["common"]["trial_nb"] = fold_id
 
@@ -242,7 +266,7 @@ def train_model(
         if trial is not None and report_interval and (epoch + 1) % report_interval == 0:
             trial.report(val_loss, epoch)
             if trial.should_prune():
-                raise optuna.TrialPruned()  # noqa: F821  only reached when trial is provided
+                raise optuna.TrialPruned()
 
         if no_improve >= patience or elapsed_min * 60 >= max_time:
             break

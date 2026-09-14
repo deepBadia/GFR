@@ -1,0 +1,83 @@
+# secteur1_amp_phase.h5 -- same grid as secteur1.h5 (59 geometries x 9 freq points)
+# but the target is already stored as (amplitude_linear, phase_degrees) instead
+# of (S_real, S_imag). IMPORTANT: `complex_format: polar` must stay OFF here --
+# that conversion assumes a *complex* (real, imag) input, which this file does
+# not have (amplitude_linear/phase_degrees are already the polar form).
+
+templates:
+
+  base:
+    common:
+      data_file: "secteur1_amp_phase.h5"
+      n_out: 2
+      complex: false
+      complex_format: null
+      seed: 42
+      verbose: true
+      cuda_nb: 0
+    dataset:
+      X_columns: ["x"]
+      Y_columns: ["amplitude_linear", "phase_degrees"]
+      axis_column: "y"
+      index_column: "index"
+      weights_type: "equal"
+      val_split: 0.20
+      size: 47
+
+  model_gfr:
+    common:
+      model_name: "GFR_Net"
+    model:
+      hidden_dim: 256
+      n_fourier: 48
+      n_layers: 6
+      n_out_layers: 3
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+
+  model_active_gfr:
+    common:
+      model_name: "active_gfr_net"
+    model:
+      hidden_dim: 256
+      n_fourier: 48
+      n_layers: 6
+      n_out_layers: 3
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+      mc_dropout: 0.20
+
+  train_standard:
+    training:
+      epochs: 1200
+      patience: 1200
+      patience_start: 300
+      batch_size: 32
+      lr: 0.0004
+      w_decay: 0.00006
+      cosine_T0: 150
+      metric: "weighted_mse"
+
+  tuning_search:
+    tuning:
+      hidden_dim: [64, 128, 192, 256, 384]
+      n_fourier: [16, 32, 48, 64]
+      n_layers: [3, 8]
+      dropout: [0.0, 0.4]
+      lr: [1.0e-5, 1.0e-2]
+      w_decay: [1.0e-7, 1.0e-2]
+      batch_size: [16, 32, 64]
+
+experiments:
+
+  secteur1_amp_phase_gfr:
+    inherit: [base, model_gfr, train_standard, tuning_search]
+    common:
+      save_name: "baseline"
+
+  secteur1_amp_phase_active_gfr:
+    inherit: [base, model_active_gfr, train_standard]
+    common:
+      save_name: "active"

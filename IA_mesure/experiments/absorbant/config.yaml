@@ -1,0 +1,99 @@
+# absorbant.h5 -- 4000 geometries (d1..d6, polarization, incidence_angle, s_type)
+# x 31 frequency points (freq_ghz), complex S-parameter (S_real, S_imag).
+# By far the largest of the 6 datasets (124k rows) -- the best candidate to
+# demonstrate active learning actually cutting down the number of expensive
+# simulations/measurements needed.
+#
+# `n_geom_cont: 6` tells GFR_Net that only the first 6 X_columns (d1..d6) are
+# continuous geometry parameters to be Fourier-encoded; the remaining 3
+# (polarization, incidence_angle, s_type -- each only 2 distinct values) go
+# through the separate small discrete encoder branch instead.
+
+templates:
+
+  base:
+    common:
+      data_file: "absorbant.h5"
+      n_out: 3
+      complex: true
+      complex_format: "polar"
+      seed: 42
+      verbose: true
+      cuda_nb: 0
+      # absorbant.h5 looks like clean simulated data (S_real/S_imag std ~0.47-0.48,
+      # smooth vs frequency). To make the pipeline more representative of a real
+      # measurement, inject additive Gaussian noise on S_real/S_imag directly
+      # (see DataLoader._process_data) with std=0.02 -- about -34 dB relative to
+      # full scale (|S|<=1), a plausible VNA-style noise floor. Set to 0.0 to
+      # go back to the original clean data.
+      measurement_noise_std: 0.02
+    dataset:
+      X_columns: ["d1", "d2", "d3", "d4", "d5", "d6", "polarization", "incidence_angle", "s_type"]
+      Y_columns: ["S_real", "S_imag"]
+      axis_column: "freq_ghz"
+      index_column: "index"
+      weights_type: "equal"
+      val_split: 0.20
+      size: 3200                     # ~80% of the 4000 geometries -> pool; 800 held out as test
+
+  model_gfr:
+    common:
+      model_name: "GFR_Net"
+    model:
+      hidden_dim: 384
+      n_fourier: 64
+      n_layers: 6
+      n_out_layers: 3
+      dropout: 0.05
+      n_geom_cont: 6
+      n_geo_fourier: 8
+      n_encoder_layers: 1
+      use_film: true
+
+  model_active_gfr:
+    common:
+      model_name: "active_gfr_net"
+    model:
+      hidden_dim: 384
+      n_fourier: 64
+      n_layers: 6
+      n_out_layers: 3
+      dropout: 0.05
+      n_geom_cont: 6
+      n_geo_fourier: 8
+      n_encoder_layers: 1
+      use_film: true
+      mc_dropout: 0.20
+
+  train_standard:
+    training:
+      epochs: 400                     # large dataset -> fewer epochs needed
+      patience: 400
+      patience_start: 80
+      batch_size: 1024
+      lr: 0.0006
+      w_decay: 0.00006
+      cosine_T0: 100
+      metric: "weighted_mse"
+
+  tuning_search:
+    tuning:
+      hidden_dim: [128, 256, 384, 512]
+      n_fourier: [32, 48, 64, 96]
+      n_layers: [4, 8]
+      dropout: [0.0, 0.3]
+      lr: [1.0e-5, 1.0e-2]
+      w_decay: [1.0e-7, 1.0e-2]
+      batch_size: [512, 1024, 2048]
+
+experiments:
+
+  absorbant_gfr:
+    inherit: [base, model_gfr, train_standard, tuning_search]
+    common:
+      save_name: "baseline"
+
+  absorbant_active_gfr:
+    inherit: [base, model_active_gfr, train_standard]
+    common:
+      save_name: "active"

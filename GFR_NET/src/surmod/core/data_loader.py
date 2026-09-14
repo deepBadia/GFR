@@ -41,6 +41,11 @@ complex_format (str, default=None)
 
 seed (int, default=42)
     Random seed.
+
+measurement_noise_std (float, default=0.0)
+    Standard deviation of additive Gaussian noise injected into the raw
+    target values (before any polar/gain-phase conversion), to simulate a
+    real noisy measurement instead of a clean simulation. 0 = disabled.
 """
 
 from __future__ import annotations
@@ -117,6 +122,19 @@ class DataLoader:
         axis_raw = self.features[:, self.axis_idx].astype(np.float32)
 
         self._reshape_to_grid(X_raw, Y_raw, axis_raw)
+
+        # Optional additive measurement noise, simulating a real (noisy) measurement
+        # instead of a clean simulation. Applied to the raw target (e.g. S_real/S_imag)
+        # BEFORE any polar/gain-phase conversion, since that is where physical
+        # measurement noise actually enters (a VNA/sensor perturbs the measured
+        # signal itself, not some quantity derived from it afterwards).
+        noise_std = float(common_cfg.get("measurement_noise_std", 0.0))
+        if noise_std > 0:
+            rng = np.random.default_rng(common_cfg.get("seed", 42))
+            self.Y = (self.Y + rng.normal(0.0, noise_std, size=self.Y.shape)).astype(np.float32)
+            if common_cfg.get("verbose", True):
+                print(f"[DataLoader] Injected measurement noise (std={noise_std}) on raw target values "
+                      f"to simulate a real measurement.")
 
         if common_cfg.get("complex_format") == "polar":
             self.Y = self._to_polar(self.Y)
@@ -292,6 +310,13 @@ class DataLoader:
             "Y_val": torch.tensor(self.Y[val_geoms], dtype=torch.float32),
             "W_val": torch.tensor(self.W[val_geoms], dtype=torch.float32),
             "axis_mask_val": torch.tensor(axis_mask_val, dtype=torch.bool),
+
+            # Raw geometry indices behind the tensors above -- handy for anyone
+            # inspecting/plotting exactly which geometries ended up in each split
+            # (e.g. `_common/data_viz.py`) without re-deriving the RNG split.
+            "train_geoms": train_geoms,
+            "val_geoms": val_geoms,
+            "test_geoms": self.test_idx.copy(),
 
             "axis": torch.tensor(self.axis, dtype=torch.float32),
             "axis_norm": torch.tensor(self.axis_norm, dtype=torch.float32),
