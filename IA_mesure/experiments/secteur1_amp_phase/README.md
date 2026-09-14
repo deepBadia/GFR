@@ -14,6 +14,7 @@ Meme grille que secteur1.h5 (59 x 9) mais la sortie est deja stockee en (amplitu
 
 ```bash
 cd IA_mesure/experiments/secteur1_amp_phase
+python 00_visualize_data.py                # affiche le split train/val/test
 python 01_train_gfr.py                     # baseline GFR-Net (tout le pool)
 python 02_train_active_gfr.py              # Active-GFR-Net + boucle d'active learning
 python 03_tune_hyperparams.py              # recherche d'hyperparametres Optuna

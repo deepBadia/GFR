@@ -14,6 +14,7 @@ ATTENTION : les noms de colonnes du fichier source sont trompeurs. Confirme avec
 
 ```bash
 cd IA_mesure/experiments/mesure_couplage
+python 00_visualize_data.py                # affiche le split train/val/test
 python 01_train_gfr.py                     # baseline GFR-Net (tout le pool)
 python 02_train_active_gfr.py              # Active-GFR-Net + boucle d'active learning
 python 03_tune_hyperparams.py              # recherche d'hyperparametres Optuna

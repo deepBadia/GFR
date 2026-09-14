@@ -20,6 +20,13 @@ templates:
       seed: 42
       verbose: true
       cuda_nb: 0
+      # absorbant.h5 looks like clean simulated data (S_real/S_imag std ~0.47-0.48,
+      # smooth vs frequency). To make the pipeline more representative of a real
+      # measurement, inject additive Gaussian noise on S_real/S_imag directly
+      # (see DataLoader._process_data) with std=0.02 -- about -34 dB relative to
+      # full scale (|S|<=1), a plausible VNA-style noise floor. Set to 0.0 to
+      # go back to the original clean data.
+      measurement_noise_std: 0.02
     dataset:
       X_columns: ["d1", "d2", "d3", "d4", "d5", "d6", "polarization", "incidence_angle", "s_type"]
       Y_columns: ["S_real", "S_imag"]

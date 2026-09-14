@@ -4,6 +4,7 @@
 For each dataset folder (auto-discovered: any subfolder containing a
 config.yaml), runs the requested steps in order:
 
+    viz     -> 00_visualize_data.py        (plots the train/val/test split)
     train   -> 01_train_gfr.py            (baseline GFR-Net, full pool)
     active  -> 02_train_active_gfr.py      (Active-GFR-Net, active-learning loop)
     tune    -> 03_tune_hyperparams.py      (Optuna search -- NOT run by default,
@@ -51,18 +52,20 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 
-STEPS = ["train", "active", "tune", "compare"]
+STEPS = ["viz", "train", "active", "tune", "compare"]
 SCRIPT_FOR_STEP = {
+    "viz": "00_visualize_data.py",
     "train": "01_train_gfr.py",
     "active": "02_train_active_gfr.py",
     "tune": "03_tune_hyperparams.py",
     "compare": "04_compare_models.py",
 }
-DEFAULT_STEPS = ["train", "active", "compare"]  # "tune" is opt-in (slowest step)
+DEFAULT_STEPS = ["viz", "train", "active", "compare"]  # "tune" is opt-in (slowest step)
 
 # Applied when --quick is passed: small enough to finish in seconds/minutes per
 # dataset just to confirm nothing is broken -- NOT meaningful results.
 QUICK_ARGS = {
+    "viz": [],
     "train": ["--epochs", "20"],
     "active": ["--n-rounds", "3", "--epochs-per-round", "30", "--patience-per-round", "30"],
     "tune": ["--n-trials", "3", "--time-hours", "0.25", "--epochs", "30"],
