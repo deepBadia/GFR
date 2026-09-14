@@ -23,6 +23,23 @@ authors = [
 maintainers = [
     {name = "Joshua Pugh", email = "joshua.pugh@thalesgroup.com"},
 ]
+# NOTE: previously empty -- `pip install surmod` pulled in none of the
+# packages the code actually imports (torch, numpy, h5py, pandas, optuna,
+# matplotlib, tqdm, pyyaml). torch is listed separately as the `torch`
+# extra so users needing a specific CUDA build can install it themselves
+# first (per the README) without pip fighting over the version.
+dependencies = [
+    "numpy",
+    "h5py",
+    "pandas",
+    "optuna",
+    "matplotlib",
+    "tqdm",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+torch = ["torch"]
 
 
 

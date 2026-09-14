@@ -1,0 +1,91 @@
+# mesure_gain.h5 -- antenna gain measurements.
+# Columns, as confirmed by the data owner: [freq, theta, gain, index (row number)].
+# axis_column = "freq" (the continuous sweep, 91 points), X_columns = ["theta"]
+# (37 distinct values, treated as a geometry-like parameter).
+#
+# NOTE (please double-check against your measurement setup): the raw value
+# ranges are a bit surprising for these names -- "freq" spans -90..90 (91
+# points, step 2), which looks more like an angle in degrees, while "theta"
+# spans 2..11 (37 points, step 0.25), which looks more like a frequency in
+# GHz (it matches exactly the confirmed 2..11 GHz sweep in mesure_couplage.h5,
+# same point count and step). We are using the names as given/confirmed; if
+# it turns out the two are in fact swapped, just swap `axis_column` and
+# `X_columns` below -- nothing else in the pipeline needs to change.
+
+templates:
+
+  base:
+    common:
+      data_file: "mesure_gain.h5"
+      n_out: 1
+      complex: false
+      complex_format: null
+      seed: 42
+      verbose: true
+      cuda_nb: 0
+    dataset:
+      X_columns: ["theta"]
+      Y_columns: ["gain"]
+      axis_column: "freq"
+      index_column: "index"
+      weights_type: "equal"
+      val_split: 0.20
+      size: 30                       # ~80% of the 37 geometries -> pool; 7 held out as test
+
+  model_gfr:
+    common:
+      model_name: "GFR_Net"
+    model:
+      hidden_dim: 192
+      n_fourier: 48
+      n_layers: 5
+      n_out_layers: 3
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+
+  model_active_gfr:
+    common:
+      model_name: "active_gfr_net"
+    model:
+      hidden_dim: 192
+      n_fourier: 48
+      n_layers: 5
+      n_out_layers: 3
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+      mc_dropout: 0.20
+
+  train_standard:
+    training:
+      epochs: 1000
+      patience: 1000
+      patience_start: 250
+      batch_size: 64
+      lr: 0.0004
+      w_decay: 0.00006
+      cosine_T0: 150
+      metric: "weighted_mse"
+
+  tuning_search:
+    tuning:
+      hidden_dim: [64, 128, 192, 256]
+      n_fourier: [16, 32, 48, 64]
+      n_layers: [3, 8]
+      dropout: [0.0, 0.4]
+      lr: [1.0e-5, 1.0e-2]
+      w_decay: [1.0e-7, 1.0e-2]
+      batch_size: [32, 64, 128]
+
+experiments:
+
+  mesure_gain_gfr:
+    inherit: [base, model_gfr, train_standard, tuning_search]
+    common:
+      save_name: "baseline"
+
+  mesure_gain_active_gfr:
+    inherit: [base, model_active_gfr, train_standard]
+    common:
+      save_name: "active"

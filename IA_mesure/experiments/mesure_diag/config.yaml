@@ -1,0 +1,85 @@
+# mesure_diag.h5 -- antenna radiation-pattern (diagram) measurements.
+# 52 distinct geometries (theta_tgt, x, c, cut, freq, pol) x 451 observation-angle
+# points (theta_obs, -90..90 deg). Target: gain (dB), a single real output.
+# `freq` here is genuinely a frequency (8.5/9.2/10.2 GHz) but only takes 3
+# values in this file, so it is treated as a discrete geometry parameter
+# rather than the continuous sweep axis -- theta_obs plays that role instead
+# (it is the one swept finely and consistently for every geometry).
+
+templates:
+
+  base:
+    common:
+      data_file: "mesure_diag.h5"
+      n_out: 1
+      complex: false
+      complex_format: null
+      seed: 42
+      verbose: true
+      cuda_nb: 0
+    dataset:
+      X_columns: ["theta_tgt", "x", "c", "cut", "freq", "pol"]
+      Y_columns: ["gain"]
+      axis_column: "theta_obs"
+      index_column: "index"
+      weights_type: "equal"
+      val_split: 0.20
+      size: 42                       # ~80% of the 52 geometries -> pool; 10 held out as test
+
+  model_gfr:
+    common:
+      model_name: "GFR_Net"
+    model:
+      hidden_dim: 256
+      n_fourier: 64
+      n_layers: 6
+      n_out_layers: 3
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+
+  model_active_gfr:
+    common:
+      model_name: "active_gfr_net"
+    model:
+      hidden_dim: 256
+      n_fourier: 64
+      n_layers: 6
+      n_out_layers: 3
+      dropout: 0.05
+      n_encoder_layers: 1
+      use_film: true
+      mc_dropout: 0.20
+
+  train_standard:
+    training:
+      epochs: 800
+      patience: 800
+      patience_start: 200
+      batch_size: 128
+      lr: 0.0004
+      w_decay: 0.00006
+      cosine_T0: 150
+      metric: "weighted_mse"
+
+  tuning_search:
+    tuning:
+      hidden_dim: [64, 128, 256, 384]
+      n_fourier: [16, 32, 48, 64, 96]
+      n_layers: [4, 8]
+      dropout: [0.0, 0.4]
+      lr: [1.0e-5, 1.0e-2]
+      w_decay: [1.0e-7, 1.0e-2]
+      batch_size: [64, 128, 256]
+
+experiments:
+
+  mesure_diag_gfr:
+    inherit: [base, model_gfr, train_standard, tuning_search]
+    common:
+      save_name: "baseline"
+
+  mesure_diag_active_gfr:
+    inherit: [base, model_active_gfr, train_standard]
+    common:
+      save_name: "active"
