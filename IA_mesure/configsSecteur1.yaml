@@ -1,0 +1,87 @@
+templates:
+
+  base_sect1:
+    common:
+      save_name: null
+      data_file: "secteur1.h5"
+      n_out: 3
+      complex: true
+      complex_format: "polar"
+      seed: 42
+      verbose: true
+    dataset:
+      "X_columns": [ 'x' ]
+      "Y_columns": [ "S_real", "S_imag" ]
+      "axis_column": "y"
+      index_column: "index"
+      weights_type: "polar"
+      size: 40
+      val_split: 0.20
+  # ====================== MODEL ======================
+  model_gfr_net:
+    common:
+      model_name: "GFR_Net"
+      cuda_nb: 1
+    model:
+      hidden_dim: 512
+      n_fourier: 64
+      n_layers: 7
+      n_out_layers: 4
+      dropout: 0.05
+      n_geo_fourier: 12
+#      n_geom_cont: 6
+      n_encoder_layers: 2
+      use_film: true
+      use_freq_attention: false
+      n_attn_heads: 8
+      use_split_head: false
+
+  model_active_gfr:
+    common:
+      model_name: "active_gfr_net"
+      cuda_nb: 1
+    model:
+      hidden_dim: 512
+      n_fourier: 64
+      n_layers: 8
+      n_out_layers: 4
+      dropout: 0.05
+      n_geo_fourier: 12
+      n_encoder_layers: 2
+      use_film: true
+      use_freq_attention: false
+      n_attn_heads: 8
+
+
+  # ====================== TRAINING (SUPERVISED ONLY) ======================
+  train_standard:
+    training:
+      epochs: 1500
+      patience: 1500
+      patience_start: 500
+      batch_size: 1536
+      lr: 0.0004
+      w_decay: 0.00006
+      scheduler: "cosine_restarts"
+      cosine_T0: 150
+      metric: "weighted_mse"
+      x_noise_std: 0.0
+      x_noise_dims: 6
+      mixup_alpha: 0
+      mixup_geo_only: true
+
+
+# =============================================================================
+# EXPERIMENTS
+# =============================================================================
+experiments:
+
+
+  comp_full_gfr_Secteur1:
+    inherit: [base_sect1, model_gfr_net, train_standard]
+    common:
+      save_name: "gfr_best_split"
+  comp_activelearning_gfr_Secteur1:
+    inherit: [ base_sect1, model_active_gfr, train_standard ]
+    common:
+      save_name: "gfr_best_split"

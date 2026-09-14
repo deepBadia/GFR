@@ -1,0 +1,34 @@
+[build-system]
+requires = [
+    "setuptools>=68",
+    "setuptools_scm[toml]>=8.0",
+    "wheel",
+]
+build-backend = "setuptools.build_meta"
+
+# =============================================================================
+# PROJECT METADATA
+# =============================================================================
+[project]
+name = "surmod"
+dynamic = ["version"]  # Fully automatic from git tags (e.g. v0.3.0)
+description = "Generalized Fourier Response Networks (GFR-Net) for fast surrogate modeling of RF and electromagnetic responses."
+readme = "README.md"
+#license = "MIT"
+#license-files = ["LICENSE"]
+requires-python = ">=3.9"
+authors = [
+    {name = "Joshua Pugh", email = "joshua.pugh@thalesgroup.com"},
+]
+maintainers = [
+    {name = "Joshua Pugh", email = "joshua.pugh@thalesgroup.com"},
+]
+
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["surmod*"]
+exclude = ["tests*", "docs*", "*.tests*"]
+
+
