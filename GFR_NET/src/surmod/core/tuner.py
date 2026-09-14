@@ -23,7 +23,7 @@ def data_path(config: Dict[str, Any]) -> str:
     return str(resolve_data_path(config))
 
 
-def run_standard(config, dm, timestamp, trial=None, save_path=None):
+def run_standard(config, dm, timestamp, trial=None, save_path=None, report_interval=1):
     from surmod.core.trainer import train_model
     from surmod.models.GFR_Net import MODEL_CLASS, process_batch
 
@@ -36,6 +36,10 @@ def run_standard(config, dm, timestamp, trial=None, save_path=None):
         process_batch=process_batch,
         save_path=save_path,
         trial=trial,
+        # Without this, `trial.report()`/`trial.should_prune()` in
+        # core/trainer.py never fire, silently disabling the MedianPruner
+        # configured below -- every trial would run to full completion.
+        report_interval=report_interval,
         timestamp=timestamp,
     )
 
@@ -129,6 +133,13 @@ def save_best_artifacts(
     print(f"   Best artifacts updated in: {tuning_root}")
 
 
+def _has_completed_trial(study: optuna.Study) -> bool:
+    """`study.best_trial` raises ValueError (not None) when no trial has
+    completed yet -- e.g. the first trial got pruned or failed. Check first.
+    """
+    return any(t.state == optuna.trial.TrialState.COMPLETE for t in study.trials)
+
+
 def best_trial_callback(
     study: optuna.Study,
     trial: optuna.trial.FrozenTrial,
@@ -139,7 +150,7 @@ def best_trial_callback(
     """Called automatically by Optuna after every trial.
     Only acts when this trial became the new best.
     """
-    if study.best_trial is not None and study.best_trial.number == trial.number:
+    if _has_completed_trial(study) and study.best_trial.number == trial.number:
         save_best_artifacts(study, trial, save_path, config, timestamp)
 
 
@@ -209,14 +220,22 @@ def run_tuning(
         show_progress_bar=True,
         gc_after_trial=True,
         callbacks=[callback],
+        # Without this, ANY exception raised inside a single trial (e.g. a
+        # CUDA OOM on an unlucky hidden_dim/batch_size draw) aborts the whole
+        # study instead of just failing that one trial and moving on.
+        catch=(Exception,),
     )
 
     print("\n" + "=" * 70)
-    print(f" Tuning finished!")
-    print(f" Best trial : {study.best_trial.number}")
-    print(f" Best value : {study.best_trial.value:.6f}")
-    for k, v in study.best_trial.params.items():
-        print(f"  {k}: {v}")
+    if _has_completed_trial(study):
+        print(f" Tuning finished!")
+        print(f" Best trial : {study.best_trial.number}")
+        print(f" Best value : {study.best_trial.value:.6f}")
+        for k, v in study.best_trial.params.items():
+            print(f"  {k}: {v}")
+    else:
+        print(" Tuning finished, but no trial completed successfully.")
+        print(" Check the per-trial logs / results/.../trials/trial_*/ folders for errors.")
     print("=" * 70)
 
     return study

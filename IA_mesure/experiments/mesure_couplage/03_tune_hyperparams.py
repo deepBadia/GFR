@@ -12,6 +12,7 @@ Usage:
 import argparse
 from pathlib import Path
 
+import optuna
 from surmod.core.tuner import run_tuning
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +39,10 @@ if __name__ == "__main__":
         time_hours=args.time_hours,
         config_overrides=overrides or None,
     )
-    print(f"\nBest trial: #{study.best_trial.number}  val_loss={study.best_trial.value:.6e}")
-    for k, v in study.best_trial.params.items():
-        print(f"  {k}: {v}")
+    completed = any(t.state == optuna.trial.TrialState.COMPLETE for t in study.trials)
+    if completed:
+        print(f"\nBest trial: #{study.best_trial.number}  val_loss={study.best_trial.value:.6e}")
+        for k, v in study.best_trial.params.items():
+            print(f"  {k}: {v}")
+    else:
+        print("\nNo trial completed successfully -- check the logs / results/.../trials/trial_*/ folders.")
