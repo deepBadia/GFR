@@ -7,12 +7,19 @@ Run `04_compare_models.py` afterwards to see how this compares against the
 full-pool baseline from `01_train_gfr.py` (the point of active learning here
 is to answer "how few of the mesure_gain geometries do we actually need?").
 
+After the loop, also calls `surmod.generate_results()` on the FINAL round's
+checkpoint (not every round -- that would reload the dataset and replot for
+each one) to produce the standard plots/report. Pass --skip-report to skip
+that.
+
 Usage:
-    python 02_train_active_gfr.py [--n-rounds N] [--epochs-per-round N] [--cpus N]
+    python 02_train_active_gfr.py [--n-rounds N] [--epochs-per-round N] [--cpus N] [--skip-report]
 """
 import argparse
 import sys
 from pathlib import Path
+
+from surmod import generate_results
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))  # import the shared `_common` package
@@ -26,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument("--patience-per-round", type=int, default=200)
     parser.add_argument("--seed-frac", type=float, default=0.15)
     parser.add_argument("--query-frac", type=float, default=0.1)
+    parser.add_argument("--skip-report", action="store_true", help="Skip generate_results() after the loop")
     add_cpu_arg(parser)
     args = parser.parse_args()
     apply_cpu_limit(args.cpus)
@@ -43,3 +51,8 @@ if __name__ == "__main__":
     )
     print(f"\nHistory   : {result.history_csv}")
     print(f"Checkpoint: {result.final_checkpoint}")
+
+    if not args.skip_report:
+        out_dir = Path(result.final_checkpoint).parent
+        print(f"\nGenerating plots/report (generate_results) -> {out_dir / 'plots'}")
+        generate_results(out_dir)

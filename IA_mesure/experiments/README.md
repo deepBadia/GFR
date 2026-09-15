@@ -38,7 +38,22 @@ Avant d'entraîner quoi que ce soit, `00_visualize_data.py` construit le `DataLo
   - 3+ paramètres (ex. `absorbant/` avec 9) -> projection PCA en 2D (calculée à la main via SVD numpy, pas de dépendance sklearn).
 - **Grille de couverture** : matrice (géométrie x point d'axe) colorée par split -- répond littéralement à "quels points sont sélectionnés pour l'entraînement et la validation". Utile aussi pour vérifier que le test set n'est pas juste "les derniers X% des lignes" : le split (`DataLoader._setup_initial_split`) utilise `np.linspace` sur les indices, donc train/val/test sont entrelacés sur tout l'espace des géométries, ce qui se voit bien sous forme de bandes verticales alternées sur la grille.
 
+Couleurs (`_common/data_viz.py::SPLIT_COLORS`) : **train = bleu, val = vert, test = rouge** -- modifiable directement dans ce dict si besoin.
+
 Le split affiché est celui de `01_train_gfr.py` (pool complet -> train/val, test toujours à part) ; il ne reflète pas l'état évolutif de l'active learning (qui interroge un sous-ensemble croissant du pool à chaque round).
+
+## Plots/rapport standard (`generate_results`) après chaque entraînement
+
+`01_train_gfr.py`, `02_train_active_gfr.py` (sur le checkpoint du dernier round) et `03_tune_hyperparams.py` (sur le meilleur essai, s'il y en a un) appellent automatiquement `surmod.generate_results()` (= `core/gen_results.py`) juste après l'entraînement. Ça relit le checkpoint + les données et sauvegarde, dans `results/.../<run>/plots/` :
+
+- `train_val_convergence.png` -- courbe de perte train/val ;
+- `amplitude_phase.png` -- seulement si la sortie est polaire/complexe (`gain_dB`/`phase`) ;
+- `predictions_vs_true.png` -- vrai vs prédit pour chaque canal de sortie, sur un échantillon de géométries ;
+- `training_report.txt` -- résumé texte (config, métriques, split).
+
+Passez `--skip-report` à n'importe lequel des 3 scripts pour sauter cette étape (utile pour des essais très rapides où le rechargement des données n'apporte rien).
+
+**Correctif apporté au passage (`core/gen_results.py`)** : le calcul de `gain_rmse_dB`/`phase_rmse_deg` ne se déclenchait que sur `n_out >= 2`, sans vérifier que la sortie est bien une quantité complexe (`common.complex: true`) -- pour `secteur1_amp_phase/` (sortie déjà en `amplitude_linear`/`phase_degrees`, pas en réel/imaginaire), ça calculait silencieusement un "Gain RMSE"/"Phase RMSE" n'importe quoi (vu en testant : 19.96 dB affiché, aberrant). La condition inclut maintenant `config["common"].get("complex", False)`.
 
 ## Bruit de mesure simulé (`absorbant/` uniquement)
 
@@ -192,9 +207,12 @@ Sorties (non versionnées, voir `.gitignore`) :
 ```
 <dataset>/results/<data_stem>/
   baseline_GFR_Net_<timestamp>/                 # 01_train_gfr.py
+    plots/, training_report.txt                 #   via generate_results() (sauf --skip-report)
   active_active_gfr_net_active_r00/ ...         # 02_train_active_gfr.py (un dossier par round)
   active_active_learning/history.csv            # historique "précision vs nb labellisé"
+                                                 #   plots/ generes pour le dernier round uniquement
   baseline_GFR_Net_<timestamp>_tuning/           # 03_tune_hyperparams.py (meilleur essai)
+    plots/, training_report.txt                 #   idem, sur le meilleur essai
 <dataset>/comparison/
   data_split_overview.png                       # 00_visualize_data.py
   comparison_summary.csv, comparison_loss.png, comparison_rmse.png,

@@ -17,7 +17,7 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 
-SPLIT_COLORS = {"train": "#4C78A8", "val": "#F58518", "test": "#B0B0B0"}
+SPLIT_COLORS = {"train": "#1f77b4", "val": "#2ca02c", "test": "#d62728"}  # blue / green / red
 
 
 def _pca_2d(X: np.ndarray) -> np.ndarray:

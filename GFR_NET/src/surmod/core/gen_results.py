@@ -144,7 +144,13 @@ def gen_results(
     }
 
     complex_format = config["common"].get("complex_format")
-    if n_out >= 2 and y_normalizer is not None:
+    # compute_gain_phase_rmse() assumes the 2/3 output channels are a complex
+    # quantity (real/imag, or gain_dB+sin+cos after polar conversion) -- it
+    # must NOT run when they are something else entirely (e.g. n_out=2 with
+    # (amplitude_linear, phase_degrees) already stored directly, as in
+    # secteur1_amp_phase.h5), or it silently prints a meaningless "gain/phase
+    # RMSE" computed as if they were real/imag.
+    if n_out >= 2 and y_normalizer is not None and config["common"].get("complex", False):
         gain_rmse, phase_rmse = compute_gain_phase_rmse(
             results["pred"], results["true"], y_normalizer, complex_format
         )
