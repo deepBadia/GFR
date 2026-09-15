@@ -1,19 +1,24 @@
 """Train the baseline GFR-Net (full pool, no active learning) on mesure_couplage.h5.
 
 Usage:
-    python 01_train_gfr.py [--epochs N]
+    python 01_train_gfr.py [--epochs N] [--cpus N]
 """
 import argparse
+import sys
 from pathlib import Path
 
 from surmod import train_model
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))  # import the shared `_common` package
+from _common.cpu import add_cpu_arg, apply_cpu_limit
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--epochs", type=int, default=None, help="Override training.epochs from config.yaml")
+    add_cpu_arg(parser)
     args = parser.parse_args()
+    apply_cpu_limit(args.cpus)
 
     overrides = {}
     if args.epochs is not None:

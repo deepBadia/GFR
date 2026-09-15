@@ -21,7 +21,11 @@ python 01_train_gfr.py                     # baseline GFR-Net (tout le pool)
 python 02_train_active_gfr.py              # Active-GFR-Net + boucle d'active learning
 python 03_tune_hyperparams.py              # recherche d'hyperparametres Optuna
 python 04_compare_models.py                # tableau + graphes de comparaison
+python 05_visualize_tuning.py              # graphes de la recherche Optuna
 ```
+
+`01`, `02` et `03` acceptent `--cpus N` pour brider les threads PyTorch
+(utile sur un cluster partage) -- voir `../README.md`.
 
 Chaque script accepte des options pour des essais rapides sans toucher
 `config.yaml`, par exemple :

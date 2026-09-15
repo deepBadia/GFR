@@ -1,14 +1,17 @@
 # Pipelines d'entraînement / active learning / tuning / comparaison
 
-Un dossier par fichier de `GFR_NET/data/*.h5`, chacun avec les mêmes 5 scripts :
+Un dossier par fichier de `GFR_NET/data/*.h5`, chacun avec les mêmes 6 scripts :
 
 | Script | Rôle |
 |---|---|
 | `00_visualize_data.py` | Affiche les géométries et le découpage train/validation/test (voir plus bas). |
 | `01_train_gfr.py` | Entraîne un `GFR_Net` classique sur tout le pool disponible (baseline). |
 | `02_train_active_gfr.py` | Entraîne un `Active-GFR-Net` avec une boucle d'active learning (voir plus bas). |
-| `03_tune_hyperparams.py` | Recherche d'hyperparamètres Optuna (`src/surmod/core/tuner.py`) pour le `GFR_Net` baseline. |
+| `03_tune_hyperparams.py` | Recherche d'hyperparamètres Optuna (`src/surmod/core/tuner.py`) pour le `GFR_Net` baseline -- voir "Que fait `03_tune_hyperparams.py` exactement ?" plus bas. |
 | `04_compare_models.py` | Évalue les checkpoints trouvés sur le **même** jeu de test, produit un tableau + des graphes. |
+| `05_visualize_tuning.py` | Graphes de la recherche Optuna (historique, importances, pruning...) -- voir plus bas. |
+
+`01`, `02` et `03` acceptent tous `--cpus N` pour brider le nombre de threads CPU utilisés (utile sur un cluster partagé -- voir plus bas).
 
 Chaque dossier a son propre `config.yaml` (système de templates déjà utilisé par `IA_mesure/configsSecteur1.yaml`), donc totalement autonome : `cd IA_mesure/experiments/<dataset>/ && python 01_train_gfr.py`.
 
@@ -51,6 +54,74 @@ common:
 - Pour revenir aux données propres : mettre `measurement_noise_std: 0.0` (ou supprimer la ligne) dans `absorbant/config.yaml`.
 - Le `DataLoader` affiche un message (`[DataLoader] Injected measurement noise...`) quand le bruit est appliqué, pour éviter toute confusion silencieuse.
 
+## Limiter le CPU utilisé (`--cpus`, cluster partagé)
+
+PyTorch utilise par défaut **tous les cœurs CPU disponibles sur la machine** pour ses calculs (matmul, etc.) -- ce n'est pas spécifique à Optuna ni à `03_tune_hyperparams.py` : `01_train_gfr.py`/`02_train_active_gfr.py` font pareil. Sur un poste perso c'est le comportement voulu ; sur un nœud de cluster partagé, un seul `python 03_tune_hyperparams.py` peut affamer tous les autres jobs.
+
+Deux façons de le brider :
+
+```bash
+# 1) Sans toucher au code, via les variables d'environnement (marche tout de suite) :
+OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 python 03_tune_hyperparams.py
+
+# 2) Avec le flag --cpus (ajouté aux 3 scripts qui entrainent un modele) :
+python 01_train_gfr.py --cpus 4
+python 02_train_active_gfr.py --cpus 4
+python 03_tune_hyperparams.py --cpus 4
+```
+
+`--cpus` appelle `torch.set_num_threads(N)` (+ `set_num_interop_threads(1)`) tout en haut du script, avant toute construction de `DataLoader`/modèle. Par défaut (sans `--cpus`), rien ne change : le comportement reste "utiliser tous les cœurs", pour ne pas surprendre quelqu'un qui tourne sur sa propre machine.
+
+`run_all.py --jobs N` (N datasets en parallèle) fait déjà ce plafonnement automatiquement (répartit les cœurs entre les N jobs) -- ce `--cpus` couvre le cas où vous lancez un script directement, en dehors de `run_all.py`.
+
+## Que fait `03_tune_hyperparams.py` exactement ? (exemple : `absorbant/`)
+
+Déroulé complet d'un `python 03_tune_hyperparams.py` (voir `src/surmod/core/tuner.py::run_tuning`) :
+
+1. **Charge `config.yaml`** pour l'expérience `<dataset>_gfr` (ex. `absorbant_gfr` = templates `base` + `model_gfr` + `train_standard` + `tuning_search`), applique les éventuels `--epochs`/`--patience-start`.
+2. **Construit le `DataLoader` UNE SEULE FOIS** pour toute la recherche (pas rechargé à chaque essai) : lit `absorbant.h5` (124 000 lignes), reforme la grille (4000 géométries x 31 fréquences), **injecte le bruit de mesure** (`measurement_noise_std: 0.02`, une fois, avec le seed fixé -> les mêmes données bruitées pour tous les essais), convertit en polaire (gain_dB, sin, cos), normalise. Le split train(2560)/val(640)/test(800) est aussi fixé une fois pour toutes (même seed -> identique à chaque essai).
+3. **Crée une étude Optuna** (`optuna.db` à la racine de `GFR_NET/`, stockage SQLite partagé entre tous les datasets) avec un `MedianPruner` (`n_startup_trials=5, n_warmup_steps=400, interval_steps=80`).
+4. **Boucle sur les essais** (jusqu'à `--n-trials` ou `--time-hours`, le premier atteint) ; pour `absorbant_gfr`, chaque essai tire au sort (voir le bloc `tuning:` de `config.yaml`) :
+   `hidden_dim` ∈ {128,256,384,512}, `n_fourier` ∈ {32,48,64,96}, `n_layers` ∈ [4,8], `dropout` ∈ [0,0.3], `lr` (log-uniforme) ∈ [1e-5,1e-2], `w_decay` (log-uniforme) ∈ [1e-7,1e-2], `batch_size` ∈ {512,1024,2048}.
+   Les autres réglages du modèle (`n_geom_cont: 6`, `n_geo_fourier: 8`, `use_film: true`, ...) restent fixes, pris de `model_gfr`.
+5. **Entraîne un `GFR_Net` frais** avec ces hyperparamètres sur le pool complet (2560 train / 640 val), jusqu'à `training.epochs` (400 par défaut pour `absorbant`) ou arrêt anticipé (`patience`), en sauvegardant le meilleur checkpoint de l'essai dans `results/absorbant/baseline_GFR_Net_<timestamp>_tuning/trials/trial_<N>/`.
+6. **Reporte `val_loss` à Optuna à chaque époque** (`trial.report`) -- le `MedianPruner` peut couper un essai qui se comporte nettement moins bien que la médiane des essais précédents à la même époque, *une fois passées les `n_warmup_steps=400` premières époques*.
+7. Quand un essai devient le **meilleur de l'étude**, son `config.yaml`/`train_metrics.csv`/checkpoint sont copiés à la racine de `results/absorbant/baseline_GFR_Net_<timestamp>_tuning/` (`best_run_info.json` y référence le chemin exact).
+8. À la fin, imprime le meilleur essai (numéro, valeur, hyperparamètres).
+
+**Point important pour `absorbant` spécifiquement** : `training.epochs` vaut **400**, exactement égal à `n_warmup_steps` du pruner. Un essai n'atteint donc jamais la fin de la période de warmup avant sa dernière époque (indices 0..399) -- **le pruning ne se déclenchera quasiment jamais avec la config par défaut**, même si le mécanisme fonctionne (voir le correctif du bug de pruning plus haut). Pour en profiter vraiment sur `absorbant`, montez `training.epochs` au-dessus de 400 (ou passez `--epochs 600` par exemple), ou réduisez `n_warmup_steps` (actuellement en dur dans `tuner.py`, pas exposé en config).
+
+**Combien de temps / CPU ça prend, concrètement ?** Sur ce sandbox (CPU seulement, 4 cœurs Xeon 2.8GHz), entraîner `GFR_Net` sur `absorbant` avec la config par défaut (hidden_dim=384, batch_size=1024) prend environ **6-7 secondes par époque**. Avec `epochs=400` par essai :
+- 1 essai complet ≈ 400 x 6.5s ≈ **43 minutes**.
+- `03_tune_hyperparams.py` par défaut fait `--n-trials 10 --time-hours 3.0` -> **10 essais complets demanderaient ~7h**, largement plus que le plafond de 3h. En pratique, le plafond de temps s'arrêtera après ~4 essais complets, pas 10. Si vous voulez vraiment 10 essais complets, passez `--time-hours 8` (ou augmentez selon le nombre de cœurs réellement disponibles sur votre machine/cluster) ou réduisez `--epochs`.
+- Consommation CPU : un seul process (`n_jobs=1` côté Optuna, essais strictement séquentiels), mais PyTorch sature plusieurs cœurs par défaut pendant l'entraînement (voir section précédente) -- utilisez `--cpus N` pour la limiter explicitement sur un cluster partagé.
+
+## Visualiser l'optimisation Optuna (`05_visualize_tuning.py`)
+
+```bash
+cd IA_mesure/experiments/absorbant
+python 05_visualize_tuning.py          # utilise la recherche la plus recente pour ce dataset
+python 05_visualize_tuning.py --study-name GFR_Net_absorbant_absorbant_20260915_1200
+```
+
+Sauvegarde dans `comparison/` (via `_common/optuna_viz.py`) :
+- `optuna_history.png` -- valeur de l'objectif par essai + meilleure valeur au fil du temps ;
+- `optuna_importances.png` -- quels hyperparamètres influencent le plus le résultat ;
+- `optuna_parallel_coordinate.png` -- coordonnées parallèles (voir les combinaisons gagnantes) ;
+- `optuna_slice.png` -- un scatter par hyperparamètre (valeur testée vs objectif) ;
+- `optuna_pruning.png` -- courbes val_loss par époque de chaque essai, et où ils ont été coupés (maintenant que le pruner fonctionne réellement, voir plus haut).
+
+Toutes les études (tous datasets confondus) vivent dans le même fichier `GFR_NET/optuna.db` (SQLite) ; `05_visualize_tuning.py` retrouve automatiquement les études du bon dataset par leur nom.
+
+**Pour une vue interactive** (recommandé si vous itérez beaucoup sur le tuning) : [`optuna-dashboard`](https://github.com/optuna/optuna-dashboard) tourne directement sur le même stockage SQLite, sans rien recalculer :
+
+```bash
+pip install optuna-dashboard
+optuna-dashboard sqlite:///$(python -c "from surmod.utils.common import get_project_root; print(get_project_root())")/optuna.db
+```
+
+puis ouvrez `http://localhost:8080` (ou faites du port-forwarding si vous êtes sur un cluster distant).
+
 ## Ce que fait la boucle d'active learning (`_common/active_learning.py`)
 
 1. Départ avec un petit ensemble de géométries labellisées, choisies aléatoirement dans le pool (le jeu de test, lui, n'est **jamais** touché).
@@ -77,6 +148,7 @@ python 01_train_gfr.py                       # baseline complet (config.yaml)
 python 02_train_active_gfr.py                # active learning
 python 03_tune_hyperparams.py --n-trials 30 --time-hours 4   # tuning Optuna
 python 04_compare_models.py                  # tableau + graphes de comparaison
+python 05_visualize_tuning.py                # graphes de la recherche Optuna
 ```
 
 Chaque script accepte des options en ligne de commande pour des tests rapides sans toucher `config.yaml` (`--epochs`, `--n-rounds`, `--n-trials`, ...) -- voir `--help` ou l'en-tête de chaque fichier.
@@ -126,7 +198,11 @@ Sorties (non versionnées, voir `.gitignore`) :
 <dataset>/comparison/
   data_split_overview.png                       # 00_visualize_data.py
   comparison_summary.csv, comparison_loss.png, comparison_rmse.png,
-  active_learning_efficiency.png
+  active_learning_efficiency.png                # 04_compare_models.py
+  optuna_history.png, optuna_importances.png,
+  optuna_parallel_coordinate.png, optuna_slice.png,
+  optuna_pruning.png                            # 05_visualize_tuning.py
+GFR_NET/optuna.db                               # SQLite storage shared by every dataset's Optuna study
 ```
 
 ## Limites connues / à garder en tête
@@ -134,4 +210,6 @@ Sorties (non versionnées, voir `.gitignore`) :
 - **`mesure_couplage.h5`** n'a que 16 géométries distinctes : l'active learning n'a de sens qu'à très petite échelle ici (pas un cas d'usage représentatif pour juger de l'efficacité de la méthode).
 - Les hyperparamètres par défaut dans chaque `config.yaml` sont des points de départ raisonnables, pas le résultat d'une recherche -- utilisez `03_tune_hyperparams.py` pour les affiner sérieusement.
 - Le tuning Optuna (`03_tune_hyperparams.py`) ne concerne que le `GFR_Net` baseline (le tuner ne gère pas encore l'active learning, cohérent avec le commentaire déjà présent dans `core/tuner.py`: "supervised only for now").
+- Avec les budgets par défaut, `03_tune_hyperparams.py` sur `absorbant` ne complètera pas ses 10 essais dans les 3h par défaut (~43 min/essai) -- voir "Que fait `03_tune_hyperparams.py` exactement ?" pour les chiffres et comment ajuster.
+- Le pruner Optuna (`MedianPruner`, `n_warmup_steps=400`) ne peut pas se déclencher sur `absorbant` avec `training.epochs: 400` (égal au warmup) -- augmentez `epochs` pour en profiter.
 - Testé sur ce sandbox en CPU uniquement (pas de GPU) avec des runs très courts (quelques epochs / rounds / essais) juste pour valider que le pipeline tourne sans erreur de bout en bout sur les 6 datasets -- les valeurs numériques observées ne sont pas représentatives de la performance finale. Relancez avec les budgets par défaut (voir chaque `config.yaml`) pour de vrais résultats.

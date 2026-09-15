@@ -7,15 +7,18 @@ taste). Stops at whichever of `--n-trials` / `--time-hours` is hit first.
 of trials with few epochs) without editing config.yaml.
 
 Usage:
-    python 03_tune_hyperparams.py [--n-trials N] [--time-hours H] [--epochs N]
+    python 03_tune_hyperparams.py [--n-trials N] [--time-hours H] [--epochs N] [--cpus N]
 """
 import argparse
+import sys
 from pathlib import Path
 
 import optuna
 from surmod.core.tuner import run_tuning
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent))  # import the shared `_common` package
+from _common.cpu import add_cpu_arg, apply_cpu_limit
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
@@ -23,7 +26,9 @@ if __name__ == "__main__":
     parser.add_argument("--time-hours", type=float, default=1.5)
     parser.add_argument("--epochs", type=int, default=None, help="Override training.epochs per trial")
     parser.add_argument("--patience-start", type=int, default=None, help="Override training.patience_start per trial")
+    add_cpu_arg(parser)
     args = parser.parse_args()
+    apply_cpu_limit(args.cpus)
 
     overrides = {}
     if args.epochs is not None:
