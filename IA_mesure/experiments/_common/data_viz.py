@@ -81,15 +81,29 @@ def plot_data_split(dm, config: Dict[str, Any], out_dir: str) -> str:
         xlabel, ylabel = "PCA 1", "PCA 2"
         title_suffix = " (PCA projection)"
 
-    for label, idx in [("train", train_geoms), ("val", val_geoms), ("test", test_geoms)]:
-        if len(idx) == 0:
-            continue
-        ax.scatter(coords[idx, 0], coords[idx, 1], s=24, alpha=0.75,
-                   color=SPLIT_COLORS[label], label=f"{label} ({len(idx)})", edgecolors="none")
+    # Draw all points in ONE scatter call, in randomized order, instead of one
+    # call per class layered train-then-val-then-test. With many geometries
+    # crammed into a small 2D (PCA) footprint, points heavily overlap, and
+    # drawing class-by-class means whichever class is drawn LAST visually
+    # paints over the other two wherever they coincide (e.g. "test", drawn
+    # last, hid train/val almost entirely on absorbant's 4000-point plot).
+    # Randomizing the draw order makes the mix honest regardless of class size.
+    groups = [("train", train_geoms), ("val", val_geoms), ("test", test_geoms)]
+    counts = {label: len(idx) for label, idx in groups}
+    all_idx = np.concatenate([idx for _, idx in groups if len(idx) > 0])
+    all_colors = np.concatenate([np.full(len(idx), label) for label, idx in groups if len(idx) > 0])
+    order = np.random.default_rng(0).permutation(len(all_idx))
+    all_idx, all_colors = all_idx[order], all_colors[order]
+
+    ax.scatter(coords[all_idx, 0], coords[all_idx, 1], s=24, alpha=0.75,
+               c=[SPLIT_COLORS[c] for c in all_colors], edgecolors="none")
+    handles = [plt.Line2D([0], [0], marker="o", linestyle="", color=SPLIT_COLORS[label],
+                          markersize=7, label=f"{label} ({counts[label]})")
+               for label in ("train", "val", "test") if counts[label] > 0]
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(f"Geometries -- {n_features} feature{'s' if n_features != 1 else ''}{title_suffix}")
-    ax.legend(loc="best", fontsize=9, title="split (n geometries)")
+    ax.legend(handles=handles, loc="best", fontsize=9, title="split (n geometries)")
     ax.grid(True, alpha=0.3)
 
     # ---- Panel B: coverage grid (geometry x axis), colored by split ----
