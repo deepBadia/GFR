@@ -32,6 +32,9 @@ templates:
       weights_type: "equal"
       val_split: 0.20
       size: 74                       # ~80% of the 91 angle values ("freq" column) -> pool; 17 held out as test
+      display_names:                 # plot labels use REAL physical meaning, not the swapped h5 names
+        freq: "theta (deg)"
+        theta: "freq (GHz)"
 
   model_gfr:
     common:

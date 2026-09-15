@@ -17,6 +17,8 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .metrics import display_name
+
 SPLIT_COLORS = {"train": "#1f77b4", "val": "#2ca02c", "test": "#d62728"}  # blue / green / red
 
 
@@ -55,7 +57,7 @@ def plot_data_split(dm, config: Dict[str, Any], out_dir: str) -> str:
     n_geoms = dm.n_geoms
     n_axis = dm.n_axis
     X_columns = list(config.get("dataset", {}).get("X_columns", []))
-    axis_name = config.get("dataset", {}).get("axis_column", "axis")
+    axis_name = display_name(config, config.get("dataset", {}).get("axis_column", "axis"))
     data_file = config.get("common", {}).get("data_file", "")
 
     X = dm.X  # normalised geometry features, shape (n_geoms, n_features)
@@ -67,14 +69,14 @@ def plot_data_split(dm, config: Dict[str, Any], out_dir: str) -> str:
     ax = axes[0]
     if n_features == 1:
         coords = np.stack([X[:, 0], np.zeros(n_geoms)], axis=1)
-        xlabel = X_columns[0] if X_columns else "x0"
+        xlabel = display_name(config, X_columns[0]) if X_columns else "x0"
         ylabel = ""
         ax.set_yticks([])
         title_suffix = ""
     elif n_features == 2:
         coords = X
-        xlabel = X_columns[0] if len(X_columns) > 0 else "x0"
-        ylabel = X_columns[1] if len(X_columns) > 1 else "x1"
+        xlabel = display_name(config, X_columns[0]) if len(X_columns) > 0 else "x0"
+        ylabel = display_name(config, X_columns[1]) if len(X_columns) > 1 else "x1"
         title_suffix = ""
     else:
         coords = _pca_2d(X)
@@ -119,7 +121,8 @@ def plot_data_split(dm, config: Dict[str, Any], out_dir: str) -> str:
     cmap = ListedColormap([SPLIT_COLORS["train"], SPLIT_COLORS["val"], SPLIT_COLORS["test"]])
     ax.imshow(grid[order].T, aspect="auto", cmap=cmap, vmin=0, vmax=2,
              interpolation="nearest", origin="lower")
-    ax.set_xlabel(f"Geometry index (sorted by {X_columns[0] if X_columns else 'x0'})")
+    sort_label = display_name(config, X_columns[0]) if X_columns else "x0"
+    ax.set_xlabel(f"Geometry index (sorted by {sort_label})")
     ax.set_ylabel(f"{axis_name} index ({n_axis} points)")
     ax.set_title("Coverage: which (geometry, axis) points are used")
     handles = [plt.Rectangle((0, 0), 1, 1, color=SPLIT_COLORS[k]) for k in ("train", "val", "test")]

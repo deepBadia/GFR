@@ -10,6 +10,7 @@ Un dossier par fichier de `GFR_NET/data/*.h5`, chacun avec les mêmes 6 scripts 
 | `03_tune_hyperparams.py` | Recherche d'hyperparamètres Optuna (`src/surmod/core/tuner.py`) pour le `GFR_Net` baseline -- voir "Que fait `03_tune_hyperparams.py` exactement ?" plus bas. |
 | `04_compare_models.py` | Évalue les checkpoints trouvés sur le **même** jeu de test, produit un tableau + des graphes. |
 | `05_visualize_tuning.py` | Graphes de la recherche Optuna (historique, importances, pruning...) -- voir plus bas. |
+| `06_plot_raw_data.py` | Trace les données brutes elles-mêmes (pas le split, pas des prédictions) : coupes et carte 2D -- voir plus bas. |
 
 `01`, `02` et `03` acceptent tous `--cpus N` pour brider le nombre de threads CPU utilisés (utile sur un cluster partagé -- voir plus bas).
 
@@ -41,6 +42,32 @@ Avant d'entraîner quoi que ce soit, `00_visualize_data.py` construit le `DataLo
 Couleurs (`_common/data_viz.py::SPLIT_COLORS`) : **train = bleu, val = vert, test = rouge** -- modifiable directement dans ce dict si besoin.
 
 Le split affiché est celui de `01_train_gfr.py` (pool complet -> train/val, test toujours à part) ; il ne reflète pas l'état évolutif de l'active learning (qui interroge un sous-ensemble croissant du pool à chaque round).
+
+## Visualiser les données brutes (`06_plot_raw_data.py`, `_common/raw_data_viz.py`)
+
+Contrairement à `00_visualize_data.py` (le split) et à `generate_results` (les prédictions du modèle), `06_plot_raw_data.py` trace uniquement les **données mesurées/simulées elles-mêmes**, dénormalisées en unités physiques. Deux vues, sauvegardées dans `comparison/` :
+
+- `raw_data_slices.png` (**coupes**) : `--n-samples` géométries choisies régulièrement dans le pool (6 par défaut), sortie tracée en fonction de l'axe continu, une courbe par géométrie, un panneau par canal de sortie (ex. `gain_dB`/`sin_phase`/`cos_phase` pour les datasets polaires). Légende commune sous la figure (pas une par panneau, sinon ça déborde sur le panneau voisin avec des libellés de géométrie longs comme sur `absorbant/`).
+- `raw_data_map.png` (**carte**) : heatmap 2D sortie vs (géométrie, axe), un panneau par canal.
+  - **1 seule colonne géométrie** (`secteur1/`, `secteur1_amp_phase/`, `mesure_couplage/`, `mesure_gain/`) -> axe des géométries en unités physiques réelles, ex. **theta vs fréquence** pour `mesure_gain/`.
+  - **Plusieurs colonnes géométrie** (`absorbant/`, `mesure_diag/`) -> pas d'axe physique unique possible, donc géométries triées par 1ère composante principale (même projection PCA que `00_visualize_data.py`).
+
+```bash
+cd IA_mesure/experiments/mesure_gain
+python 06_plot_raw_data.py                 # comparison/raw_data_slices.png + raw_data_map.png
+python 06_plot_raw_data.py --n-samples 10
+```
+
+**Labels d'axes et noms de colonnes trompeurs (`mesure_gain/`, `mesure_couplage/`)** : ces deux fichiers ont des noms de colonnes h5 inversés par rapport à leur vrai sens physique (voir la table "Correspondance dataset -> config" et les commentaires en tête de leurs `config.yaml`). `config.yaml` utilisait déjà le bon mapping de *données* (`axis_column`/`X_columns` pointent vers les bonnes colonnes h5), mais les graphiques affichaient encore le nom de colonne h5 brut comme libellé -- ex. l'axe contenant 2-11 GHz s'appelait "theta" et l'axe contenant -90°..90° s'appelait "freq", littéralement à l'envers de la réalité physique. Corrigé via une clé optionnelle `dataset.display_names` dans `config.yaml` (utilisée par `_common/metrics.py::display_name`, appliquée dans `_common/data_viz.py` et `_common/raw_data_viz.py`) :
+
+```yaml
+dataset:
+  display_names:
+    freq: "theta (deg)"
+    theta: "freq (GHz)"
+```
+
+Sans cette clé (les 4 autres datasets), les libellés restent simplement les noms de colonnes h5 -- aucun changement de comportement pour eux.
 
 ## Plots/rapport standard (`generate_results`) après chaque entraînement
 
@@ -164,6 +191,7 @@ python 02_train_active_gfr.py                # active learning
 python 03_tune_hyperparams.py --n-trials 30 --time-hours 4   # tuning Optuna
 python 04_compare_models.py                  # tableau + graphes de comparaison
 python 05_visualize_tuning.py                # graphes de la recherche Optuna
+python 06_plot_raw_data.py                   # coupes + carte des données brutes
 ```
 
 Chaque script accepte des options en ligne de commande pour des tests rapides sans toucher `config.yaml` (`--epochs`, `--n-rounds`, `--n-trials`, ...) -- voir `--help` ou l'en-tête de chaque fichier.
@@ -220,6 +248,7 @@ Sorties (non versionnées, voir `.gitignore`) :
   optuna_history.png, optuna_importances.png,
   optuna_parallel_coordinate.png, optuna_slice.png,
   optuna_pruning.png                            # 05_visualize_tuning.py
+  raw_data_slices.png, raw_data_map.png         # 06_plot_raw_data.py
 GFR_NET/optuna.db                               # SQLite storage shared by every dataset's Optuna study
 ```
 

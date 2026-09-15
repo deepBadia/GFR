@@ -32,6 +32,9 @@ templates:
       weights_type: "equal"
       val_split: 0.20
       size: 13                       # ~80% of the 16 (coupling_id, pol) combos -> pool; 3 held out as test
+      display_names:                 # plot labels use REAL physical meaning, not the misleading h5 names
+        freq: "coupling_id"
+        ant_nb: "freq (GHz)"
 
   model_gfr:
     common:

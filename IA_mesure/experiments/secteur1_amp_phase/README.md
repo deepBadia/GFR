@@ -20,6 +20,7 @@ python 02_train_active_gfr.py              # Active-GFR-Net + boucle d'active le
 python 03_tune_hyperparams.py              # recherche d'hyperparametres Optuna
 python 04_compare_models.py                # tableau + graphes de comparaison
 python 05_visualize_tuning.py              # graphes de la recherche Optuna
+python 06_plot_raw_data.py                  # coupes + carte des donnees brutes
 ```
 
 `01`, `02` et `03` acceptent `--cpus N` pour brider les threads PyTorch

@@ -27,6 +27,19 @@ def effective_output_names(config: Dict[str, Any], n_out: int) -> List[str]:
     return names[:n_out]
 
 
+def display_name(config: Dict[str, Any], key: str) -> str:
+    """Human-readable label for a raw h5 column name.
+
+    Usually just the column name itself, except for datasets like
+    mesure_gain.h5 / mesure_couplage.h5 whose h5 column names are confirmed
+    to be swapped relative to their actual physical meaning (e.g. the column
+    literally named "theta" really holds frequency). Their config.yaml sets
+    ``dataset.display_names`` to override the label without touching the
+    column names DataLoader uses to index into the h5 file.
+    """
+    return config.get("dataset", {}).get("display_names", {}).get(key, key)
+
+
 def per_channel_rmse(
     pred_norm: np.ndarray,
     true_norm: np.ndarray,
