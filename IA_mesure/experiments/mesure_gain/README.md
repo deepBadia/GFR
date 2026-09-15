@@ -8,7 +8,7 @@ sorties). Ce fichier ne liste que ce qui est specifique a ce dataset.
 
 ## Notes specifiques
 
-37 geometries (theta) x 91 points de frequence (freq). Voir le commentaire en tete de config.yaml : les plages de valeurs sont surprenantes pour ces noms de colonnes (freq va de -90 a 90, theta de 2 a 11) -- a revalider avec la source de mesure si les resultats semblent incoherents ; si besoin, inversez juste `axis_column` et `X_columns` dans config.yaml, rien d'autre ne change.
+91 geometries (angle, colonne h5 nommee "freq") x 37 points de frequence (colonne h5 nommee "theta"). CONFIRME par le proprietaire des donnees : les noms de colonnes "theta" et "freq" sont inverses dans le fichier source (meme situation que `mesure_couplage.h5`) -- la colonne "theta" contient en realite la frequence (2-11 GHz, correspond exactement au balayage de `mesure_couplage.h5`), et la colonne "freq" contient en realite l'angle d'observation (-90..90 deg). config.yaml utilise deja le bon mapping (axis_column: theta, X_columns: [freq]).
 
 ## Utilisation
 

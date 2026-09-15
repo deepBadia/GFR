@@ -1,16 +1,17 @@
 # mesure_gain.h5 -- antenna gain measurements.
-# Columns, as confirmed by the data owner: [freq, theta, gain, index (row number)].
-# axis_column = "freq" (the continuous sweep, 91 points), X_columns = ["theta"]
-# (37 distinct values, treated as a geometry-like parameter).
 #
-# NOTE (please double-check against your measurement setup): the raw value
-# ranges are a bit surprising for these names -- "freq" spans -90..90 (91
-# points, step 2), which looks more like an angle in degrees, while "theta"
-# spans 2..11 (37 points, step 0.25), which looks more like a frequency in
-# GHz (it matches exactly the confirmed 2..11 GHz sweep in mesure_couplage.h5,
-# same point count and step). We are using the names as given/confirmed; if
-# it turns out the two are in fact swapped, just swap `axis_column` and
-# `X_columns` below -- nothing else in the pipeline needs to change.
+# CONFIRMED (by the data owner): the h5 column names "theta" and "freq" are
+# swapped relative to their actual content:
+#   - the column literally named "theta" is actually the frequency sweep
+#     (2..11 GHz, 37 points, 0.25 GHz step -- matches mesure_couplage.h5's
+#     "ant_nb" column exactly: same range/count/step, same measurement setup)
+#   - the column literally named "freq" is actually the observation angle
+#     theta (-90..90 deg, 91 points, 2 deg step)
+# So below, axis_column/X_columns use the h5 column names as they exist in
+# the file, but mapped to their REAL physical meaning: axis_column="theta"
+# (the h5 column, which is really frequency) is the continuous sweep, and
+# X_columns=["freq"] (the h5 column, which is really the angle) is the
+# geometry-like parameter -- one gain(frequency) curve per observation angle.
 
 templates:
 
@@ -24,13 +25,13 @@ templates:
       verbose: true
       cuda_nb: 0
     dataset:
-      X_columns: ["theta"]
+      X_columns: ["freq"]            # h5 column "freq" -- really the observation angle theta
       Y_columns: ["gain"]
-      axis_column: "freq"
+      axis_column: "theta"           # h5 column "theta" -- really the frequency sweep (2-11 GHz)
       index_column: "index"
       weights_type: "equal"
       val_split: 0.20
-      size: 30                       # ~80% of the 37 geometries -> pool; 7 held out as test
+      size: 74                       # ~80% of the 91 angle values ("freq" column) -> pool; 17 held out as test
 
   model_gfr:
     common:
